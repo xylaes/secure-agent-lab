@@ -1,211 +1,136 @@
-# 🔐 Secure Agent Lab — Google Secure Agentic Coding Codelab
+# 🔐 Secure Agentic Coding Lab: Hardening AI Agents against Runtime Risks
 
-This repository is the complete work product from the **[Secure Agentic Coding Codelab](https://codelabs.developers.google.com/secure-agentic-coding)** (June 2026).
-
-It contains a fully scaffolded ADK 2.0 shopping assistant agent, hardened with a multi-layer security posture: pre-commit scanning, custom Semgrep rules, agent interception hooks, STRIDE threat modeling, and a TDD security test suite.
+This repository contains the complete implementation and artifacts from the **[Secure Agentic Coding Codelab](https://codelabs.developers.google.com/secure-agentic-coding)**. It serves as a hands-on learning blueprint for security engineers and AI developers looking to understand the threat landscape of LLM-based agents and how to secure them.
 
 ---
 
-## 📁 Repository Structure
+## 🎯 Lab Purpose & Philosophy
 
-```
-secure-agent-lab/
-└── shopping-assistant/       # Core ADK 2.0 agent project
-    ├── app/
-    │   ├── agent.py               # ShoppingHelper agent + redeem_discount tool
-    │   ├── agent_runtime_app.py   # Agent Engine deployment wrapper
-    │   └── app_utils/             # Telemetry & typing helpers
-    ├── .agents/
-    │   ├── CONTEXT.md             # Secure coding standards & TDD planning gate
-    │   ├── hooks.json             # PreToolUse interception hook config
-    │   ├── scripts/
-    │   │   └── validate_tool_call.py  # Hook script: blocks destructive shell commands
-    │   └── skills/
-    │       └── stride-threat-model/
-    │           └── SKILL.md       # STRIDE threat modeling skill
-    ├── .semgrep/
-    │   └── rules.yaml             # Custom Semgrep rule: detects hardcoded Google API keys
-    ├── .pre-commit-config.yaml    # Pre-commit hooks: whitespace + Semgrep scan
-    ├── tests/
-    │   └── test_agent.py          # Security test suite (pytest)
-    ├── threat_model.md            # STRIDE threat model output
-    └── pyproject.toml             # Project dependencies (uv)
-```
+Traditional application security focuses on securing APIs, databases, and authentication endpoints. However, **AI agents introduce a new class of runtime risks**: they dynamically select tools, execute commands, parse unstructured input, and make decisions semi-autonomously. 
+
+This lab is designed to teach how to transition from traditional application security to **Agentic Security**, implementing a multi-layered defense-in-depth posture that spans static analysis, threat modeling, test-driven development (TDD), and runtime interception.
 
 ---
 
-## 🏗️ What Was Built — Step by Step
+## 🎓 Key Learnings & Takeaways
 
-### Step 1 — Project Scaffolding
+### 1. Agentic Threat Modeling (STRIDE)
+Instead of modeling simple data flows, this lab demonstrates how to apply the STRIDE framework specifically to ReAct agent architectures. This highlights unique agent vectors:
+* **Spoofing & Elevation of Privilege**: How LLM instruction-following can be tricked into spoofing `user_id` values or bypassing basic string checks (e.g. prefix matches).
+* **Tampering & TOCTOU**: Understanding race conditions (Time-of-Check to Time-of-Use) when agents manage volatile state across tool runs.
+* Read the completed model in [threat_model.md](file:///C:/Users/danny/secure-agent-lab/shopping-assistant/threat_model.md).
 
-```bash
-git init
-git config user.name "Kaggle Student"
-git config user.email "kaggle@student.dev"
+### 2. Multi-Layer Defense-in-Depth
+You'll learn how to build a robust safety net around the agent. The lab demonstrates security enforcement at four distinct boundaries:
+1. **Developer Context Gate**: Grounding developer/coding agents (using [CONTEXT.md](file:///C:/Users/danny/secure-agent-lab/shopping-assistant/.agents/CONTEXT.md)) to enforce secure-by-default paradigms.
+2. **Static Commit Gate**: Stopping credential leaks automatically via Semgrep and pre-commit hooks.
+3. **Runtime Interception Hook**: Intercepting and validating tools *before* they are sent to the execution layer.
+4. **Tool-Level Guardrails**: Writing robust Python logic with strict type checking and state isolation.
 
-cd shopping-assistant
-uvx google-agents-cli create shopping-assistant --template adk
-$env:UV_LINK_MODE="copy"; uv sync
+```mermaid
+graph TD
+    User([User Prompt]) --> Agent[LLM Agent / ADK 2.0]
+    
+    subgraph 1. Coding & Planning
+        Context[CONTEXT.md Standards]
+    end
+    
+    subgraph 2. Static Commit Hook
+        PreCommit[Pre-Commit Config] --> Semgrep[Semgrep Rules]
+    end
+    
+    subgraph 3. Infrastructure Hooks
+        PreToolHook[PreToolUse Hook] --> ValidateScript[validate_tool_call.py]
+    end
+    
+    subgraph 4. Application Logic
+        Tool[redeem_discount Tool] --> StateCheck[Business Logic Guardrails]
+    end
+    
+    Agent -->|Invokes Tool| PreToolHook
+    ValidateScript -->|Approved| Tool
+    Tool -->|Accesses State| StateCheck
+    
+    style Context fill:#f9f,stroke:#333,stroke-width:2px
+    style Semgrep fill:#ffcccb,stroke:#333,stroke-width:2px
+    style ValidateScript fill:#ffeb3b,stroke:#333,stroke-width:2px
+    style StateCheck fill:#90caf9,stroke:#333,stroke-width:2px
 ```
 
-- Used `agents-cli 0.5.0` to scaffold an ADK 2.0 ReAct agent project.
-- Set `UV_LINK_MODE=copy` to work around Windows/OneDrive hardlink restrictions.
-- Fixed a scaffolding bug: replaced the non-existent `Edge.chain(...)` syntax with ADK 2.0's tuple-based `edges=[("START", shopping_agent)]`.
-- Fixed the `App(name=...)` mismatch by aligning the name to `"app"` (matching the folder name), resolving `SessionNotFoundError` during the dev server session lookup.
+### 3. Static Analysis for LLM Secret Leakage
+Hardcoded keys are a major vulnerability in AI development. In this lab, you'll learn to:
+* Write custom [Semgrep rules](file:///C:/Users/danny/secure-agent-lab/shopping-assistant/.semgrep/rules.yaml) that target specific pattern matches for sensitive credentials (e.g., Google `AIzaSy...` keys).
+* Integrate them into a local [pre-commit hook](file:///C:/Users/danny/secure-agent-lab/shopping-assistant/.pre-commit-config.yaml) to block insecure commits before they reach remote repositories.
+
+### 4. Runtime Tool Interception (PreToolUse)
+How do you prevent an agent from running harmful commands at runtime, even if it is tricked by prompt injection?
+* Configure `PreToolUse` hooks in [hooks.json](file:///C:/Users/danny/secure-agent-lab/shopping-assistant/.agents/hooks.json).
+* Build a command validator script [validate_tool_call.py](file:///C:/Users/danny/secure-agent-lab/shopping-assistant/.agents/scripts/validate_tool_call.py) that acts as an out-of-band firewall, parsing tool parameters (like shell commands) and blocking destructive executions (e.g., preventing arbitrary shell command execution).
+
+### 5. TDD for Security Boundaries
+Rather than verifying security manually, you'll learn to write a dedicated security test suite using `pytest` in [test_agent.py](file:///C:/Users/danny/secure-agent-lab/shopping-assistant/tests/test_agent.py). These tests assert:
+* **Single-Use Enforcement**: Discount codes cannot be redeemed more than once.
+* **Privilege Segregation**: Guest accounts (e.g., `guest_*`) are rejected.
+* **Strict State Isolation**: Using Pytest fixtures to reset state between tests to guarantee zero test cross-contamination.
 
 ---
 
-### Step 2 — Agent Implementation
+## 📁 Repository Structure & Educational Roles
 
-**File: [`shopping-assistant/app/agent.py`](./shopping-assistant/app/agent.py)**
+Every file in this project represents an educational lesson in agentic safety:
 
-The agent implements:
-- A `ShoppingHelper` `LlmAgent` powered by `gemini-3.1-flash-lite`.
-- A `redeem_discount(code, user_id) -> str` tool with the following business logic guardrails:
-  - Rejects unknown discount codes (not in `DISCOUNT_STORE`).
-  - Rejects already-redeemed codes (single-use enforcement).
-  - Rejects guest accounts (`user_id.startswith("guest_")`).
-- A **deliberate simulated vulnerability**: a hardcoded `api_key="AIzaSyD-mock-key-value-12345"` on the `Gemini(...)` constructor — inserted intentionally to demonstrate that pre-commit security scanning catches it.
-
-```python
-# Simulated vulnerability: Unsafe hardcoded API key introduced in initial draft code
-model = Gemini(model="gemini-3.1-flash-lite", api_key="AIzaSyD-mock-key-value-12345")  # type: ignore
-```
-
-> ⚠️ **This key is intentionally fake and is present to demonstrate the Semgrep pre-commit block.**
+| File / Directory | Concept / Takeaway | Description |
+| :--- | :--- | :--- |
+| [`app/agent.py`](file:///C:/Users/danny/secure-agent-lab/shopping-assistant/app/agent.py) | **Secure Tool Design** | Demonstrates robust parameter validation (rejects invalid codes, prevents guest access) alongside an *intentional simulated vulnerability* (hardcoded mock API key) to trigger security gates. |
+| [`.agents/CONTEXT.md`](file:///C:/Users/danny/secure-agent-lab/shopping-assistant/.agents/CONTEXT.md) | **Developer Alignment** | Defines rules that developer/agent models must follow, ensuring secure coding paradigms are established from the outset. |
+| [`.agents/hooks.json`](file:///C:/Users/danny/secure-agent-lab/shopping-assistant/.agents/hooks.json) | **Runtime Interception** | Configures infrastructure-level hooks to intercept tool usage before execution. |
+| [`scripts/validate_tool_call.py`](file:///C:/Users/danny/secure-agent-lab/shopping-assistant/.agents/scripts/validate_tool_call.py) | **Security Firewalls** | Python script executing out-of-band logic to inspect and block destructive tools. |
+| [`.semgrep/rules.yaml`](file:///C:/Users/danny/secure-agent-lab/shopping-assistant/.semgrep/rules.yaml) | **Static Scanning** | Custom rule patterns targeting Google API Studio credential signatures. |
+| [`.pre-commit-config.yaml`](file:///C:/Users/danny/secure-agent-lab/shopping-assistant/.pre-commit-config.yaml) | **Git Hooks** | Automates the local Semgrep scan, preventing vulnerabilities from leaking to version control. |
+| [`tests/test_agent.py`](file:///C:/Users/danny/secure-agent-lab/shopping-assistant/tests/test_agent.py) | **TDD & Assertions** | Pytest security test suite asserting on authorization and single-use business constraints. |
+| [`threat_model.md`](file:///C:/Users/danny/secure-agent-lab/shopping-assistant/threat_model.md) | **STRIDE Framework** | Full STRIDE analysis documenting agent threat vectors and their respective mitigations. |
 
 ---
 
-### Step 3 — Security Hardening Layer
+## 🏗️ Step-by-Step Lab Architecture
 
-#### 3a. Secure Coding Standards (`CONTEXT.md`)
+### 1. Project Scaffolding & Setup
+* Scaffolded an ADK 2.0 ReAct agent project using `uvx google-agents-cli`.
+* Configured `pyproject.toml` and verified virtual environment configuration via `uv`.
 
-**File: [`.agents/CONTEXT.md`](./shopping-assistant/.agents/CONTEXT.md)**
+### 2. Custom Semgrep Rules & Git Hook Automation
+* Defined a rule to scan for credentials matching `AIzaSy[A-Za-z0-9_\-]*`.
+* Added the pre-commit configuration.
+* **Demonstration**: When a developer attempts to commit `agent.py` containing the mock key, the commit is blocked by the Git hook:
+  ```bash
+  git commit -m "feat: add API key"
+  # Semgrep Scan...........................................................Failed
+  # - hook id: semgrep-local
+  # - exit code: 1
+  # Security violation: Hardcoded Google API key detected.
+  ```
 
-Defines three paved-road rules enforced at the planning/coding agent level:
-1. **Tool Input Validation** — all agent tools must use Pydantic schemas.
-2. **No Shell Execution** — raw shell commands are blocked unless approved by `hooks.json`.
-3. **Pre-Commit Remediation Loop** — any Semgrep failure must be treated as a refactoring task.
+### 3. Tool Verification & TDD
+* Formulated security boundary tests first.
+* Implemented the `redeem_discount` tool.
+* Ran and passed the security test suite:
+  ```bash
+  uv run pytest tests/test_agent.py
+  # ======================== 3 passed in 3.57s ========================
+  ```
 
-Also includes a **TDD Planning Gate**: every implementation plan must include a dedicated *Security Boundaries & Assertions* section.
-
-#### 3b. Custom Semgrep Rule
-
-**File: [`.semgrep/rules.yaml`](./shopping-assistant/.semgrep/rules.yaml)**
-
-```yaml
-rules:
-  - id: detect-hardcoded-google-api-key
-    pattern-regex: 'AIzaSy[A-Za-z0-9_\-]*'
-    message: "Security violation: Hardcoded Google API key detected."
-    languages: [python]
-    severity: ERROR
-```
-
-Detects any literal Google API key (`AIzaSy...`) in Python source files and blocks the commit.
-
-#### 3c. Pre-Commit Configuration
-
-**File: [`.pre-commit-config.yaml`](./shopping-assistant/.pre-commit-config.yaml)**
-
-```yaml
-repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
-    hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-  - repo: local
-    hooks:
-      - id: semgrep-local
-        name: Semgrep Scan
-        entry: uv run --directory shopping-assistant semgrep --config .semgrep/rules.yaml --error
-        language: system
-        types: [python]
-        pass_filenames: false
-```
-
-The Semgrep hook is configured at the **repo root** (one level above `shopping-assistant`) and uses `--directory` to target the subdirectory. It **successfully blocks** the commit when the mock API key is present.
-
-#### 3d. Agent Interception Hook
-
-**File: [`.agents/hooks.json`](./shopping-assistant/.agents/hooks.json)**
-
-```json
-{
-  "enabled": true,
-  "PreToolUse": [
-    {
-      "matcher": "run_command",
-      "command": "python3 .agents/scripts/validate_tool_call.py",
-      "timeout": 10
-    }
-  ]
-}
-```
-
-Every `run_command` tool call is intercepted by `validate_tool_call.py`, which reads the proposed command and exits with code `1` (blocking execution) if it matches destructive patterns like `rm -rf`.
-
----
-
-### Step 4 — STRIDE Threat Model
-
-**File: [`threat_model.md`](./shopping-assistant/threat_model.md)**
-
-Executed the `stride-threat-model` skill against the shopping assistant graph. The model identified 6 threat categories:
-
-| STRIDE Category | Finding |
-|---|---|
-| **Spoofing** | `user_id` is not cryptographically verified — any string is accepted |
-| **Tampering** | In-memory `DISCOUNT_STORE` resets on restart; race condition (TOCTOU) possible |
-| **Repudiation** | No tamper-resistant audit log for successful redemptions |
-| **Information Disclosure** | Hardcoded `api_key` leaks credentials to version control |
-| **Denial of Service** | No rate-limiting on model calls or tool executions |
-| **Elevation of Privilege** | `guest_` check is a string prefix — easily bypassed by crafting any other `user_id` |
-
----
-
-### Step 5 — TDD Security Test Suite
-
-**File: [`tests/test_agent.py`](./shopping-assistant/tests/test_agent.py)**
-
-Written to verify all security boundary findings from the STRIDE model:
-
-```bash
-uv run pytest tests/test_agent.py
-# ======================== 3 passed in 3.57s ========================
-```
-
-| Test | Asserts |
-|---|---|
-| `test_discount_code_can_only_be_redeemed_once` | First redemption succeeds; second with same code is rejected |
-| `test_discount_redemption_rejects_invalid_code` | Unknown codes return `Error: Invalid discount code` |
-| `test_discount_redemption_rejects_guest_accounts` | `guest_*` user IDs are blocked; store state is unchanged |
-
-The fixture uses `autouse=True` to fully reset `DISCOUNT_STORE` between every test for strict isolation.
-
----
-
-### Step 6 — ADK Dev UI Playground
-
-The agent dev server was successfully started:
-
-```bash
-uv run adk web app --host 127.0.0.1 --port 8080
-# ADK Web Server started — http://127.0.0.1:8080
-```
-
-The playground at `http://127.0.0.1:8080/dev-ui/?app=app` confirms:
-- The `ShoppingHelper` agent graph renders correctly (`START → ShoppingHelper → redeem_discount → END`).
-- A test message was sent and the agent attempted model inference.
-- The `400 INVALID_ARGUMENT: API key not valid` error is the **expected and intentional** result — it proves the hardcoded mock key `AIzaSyD-mock-key-value-12345` is being picked up by the model client, and is not a real credential that would ever succeed.
+### 4. Running the Dev Playground
+* Started the ADK dev server to inspect the agent graph and tools visually:
+  ```bash
+  uv run adk web app --host 127.0.0.1 --port 8080
+  ```
 
 ---
 
 ## 🔑 Key Technical Notes & Gotchas
 
 | Problem | Root Cause | Fix Applied |
-|---|---|---|
+| :--- | :--- | :--- |
 | `uv sync` fails on Windows | OneDrive filesystem blocks hardlinks | `$env:UV_LINK_MODE="copy"` |
 | `Edge.chain(...)` AttributeError | Method doesn't exist in ADK 2.0 | Replaced with `edges=[("START", agent)]` tuple notation |
 | `SessionNotFoundError` in dev server | `App(name="shopping_assistant")` mismatches folder name `app` | Changed to `App(name="app")` |
@@ -218,36 +143,34 @@ The playground at `http://127.0.0.1:8080/dev-ui/?app=app` confirms:
 ## 🚀 Running It Yourself
 
 ### Prerequisites
-- Python 3.11–3.13
-- [`uv`](https://docs.astral.sh/uv/)
-- `uvx google-agents-cli`
-- A real `GEMINI_API_KEY` from [Google AI Studio](https://aistudio.google.com/app/apikey) — or Google Cloud ADC for Vertex AI
+* Python 3.11–3.13
+* [`uv`](https://docs.astral.sh/uv/)
+* `uvx google-agents-cli`
+* A real `GEMINI_API_KEY` from [Google AI Studio](https://aistudio.google.com/app/apikey)
 
-### Install
+### Clone & Build
 ```bash
+git clone https://github.com/xylaes/secure-agent-lab.git
+cd secure-agent-lab/shopping-assistant
 $env:UV_LINK_MODE="copy"
-cd shopping-assistant
 uv sync
 ```
 
-### Run Security Tests
+### Run Security Verification Tests
 ```bash
 uv run pytest tests/test_agent.py
 ```
 
-### Run the Dev Playground
+### Try Tracing on the Dev Server
 ```bash
-# Set a real key first (replace the mock in app/agent.py)
 uv run adk web app --host 127.0.0.1 --port 8080
-# Open: http://127.0.0.1:8080/dev-ui/?app=app
+# Access: http://127.0.0.1:8080/dev-ui/?app=app
 ```
 
 ---
 
 ## 📚 References
-
-- [Secure Agentic Coding Codelab](https://codelabs.developers.google.com/secure-agentic-coding)
-- [Google Agent Development Kit (ADK)](https://adk.dev/)
-- [google-agents-cli](https://pypi.org/project/google-agents-cli/)
-- [Semgrep](https://semgrep.dev/)
-- [STRIDE Threat Modeling](https://learn.microsoft.com/en-us/azure/security/develop/threat-modeling-tool-threats)
+* [Google Secure Agentic Coding Codelab](https://codelabs.developers.google.com/secure-agentic-coding)
+* [Google Agent Development Kit (ADK)](https://adk.dev/)
+* [Semgrep Documentation](https://semgrep.dev/)
+* [STRIDE Threat Modeling Guidance](https://learn.microsoft.com/en-us/azure/security/develop/threat-modeling-tool-threats)
